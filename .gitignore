@@ -1,0 +1,64 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Runtime data
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# Coverage
+coverage
+.nyc_output
+
+# Build output
+build
+/dist
+/out
+.tmp
+.tmp-*
+.cache
+tmp
+temp
+
+# Dependency directories
+/node_modules
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# OS-specific files
+.DS_Store
+Thumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# Editor directories and files
+.vscode/
+.idea/
+.vscode-test/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+*.orig
+
+# TypeScript
+*.tsbuildinfo
+
+# Tooling caches
+.eslintcache
+.stylelintcache
+.turbo
+
+# Misc
+*.local
