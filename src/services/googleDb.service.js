@@ -94,11 +94,7 @@ export async function getGoogleConnection(userId) {
     .limit(1)
     .maybeSingle();
 
-    console.log("sf",data);
-
   if (error) throw error;
-
-  
 
   return data || null;
 }

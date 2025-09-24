@@ -56,8 +56,7 @@ async function getFreshAccessToken(userId = 1) {
   if (mem.googleAds.access_token && now < mem.googleAds.access_token_expiry - 60) {
     return mem.googleAds.access_token;
   }
-  else
-  {
+  //else{
     // 2) Try DB fallback
     const row = await getGoogleConnection(userId);
     if (row) {
@@ -65,10 +64,11 @@ async function getFreshAccessToken(userId = 1) {
       if (row.ad_account_id && !mem.googleAds.selectedCustomerId) {
         mem.googleAds.selectedCustomerId = String(row.ad_account_id);
       }
-      
+     
       // if DB token is still fresh, use it
       //@Need to Uncoment and below if to be remove
       if (tokenIsFresh(row) && row.token) {
+      //if (row.token) {
         mem.googleAds.access_token = row.token;
         // recompute approximate expiry in seconds
         const expSec = Math.floor((new Date(row.token_expires_at).getTime() - Date.now()) / 1000);
@@ -98,7 +98,7 @@ async function getFreshAccessToken(userId = 1) {
       }
        
     }
-  }
+  //}
   throw new Error("No valid Google Ads token available. Reconnect via /ads/google/connect.");
 }
 
@@ -142,26 +142,52 @@ export async function setSelectedCustomerId(resourceName, userId = 1) {
   return id;
 }
 
+// export async function searchStreamGAQL(gaql, userId = 1) {
+//   const token = await getFreshAccessToken(userId);
+//   const cid = mem.googleAds.selectedCustomerId;
+//   if (!cid) throw new Error("No customerId selected. POST to /ads/google/select-customer first.");
+
+//   const url = `${ADS_API_BASE}/${ADS_API_VERSION}/customers/${cid}/googleAds:searchStream`;
+//   const { data } = await axios.post(
+//     url,
+//     { query: gaql },
+//     { headers: { ...baseHeaders(token), "Content-Type": "application/json" } }
+//   );
+ 
+//   console.log("Full API response:", JSON.stringify(data, null, 2));
+
+//   // flatten results from all chunks
+//   const rows = [];
+//   for (const chunk of data) if (chunk.results) rows.push(...chunk.results);
+//   return rows;
+// }
+
 export async function searchStreamGAQL(gaql, userId = 1) {
   const token = await getFreshAccessToken(userId);
   const cid = mem.googleAds.selectedCustomerId;
   if (!cid) throw new Error("No customerId selected. POST to /ads/google/select-customer first.");
 
-  console.log("GSql",gaql);
   const url = `${ADS_API_BASE}/${ADS_API_VERSION}/customers/${cid}/googleAds:searchStream`;
-  const { data } = await axios.post(
-    url,
-    { query: gaql },
-    { headers: { ...baseHeaders(token), "Content-Type": "application/json" } }
-  );
- 
-  console.log(JSON.stringify(res.data, null, 2));
+  console.log("URL:", url);
+  try {
+    const { data } = await axios.post(
+      url,
+      { query: gaql },
+      { headers: { ...baseHeaders(token), "Content-Type": "application/json" } }
+    );
 
-  // flatten results from all chunks
-  const rows = [];
-  for (const chunk of data) if (chunk.results) rows.push(...chunk.results);
-  return rows;
+    console.log("✅ Full API response:", JSON.stringify(data, null, 2));
+
+    const rows = [];
+    if (Array.isArray(data)) {
+      for (const chunk of data) if (chunk.results) rows.push(...chunk.results);
+    }
+    console.log("Flattened rows count:", rows.length);
+    return rows;
+  } catch (err) {
+    console.error("❌ Google Ads API error:", err.response?.data || err.message);
+    throw err;
+  }
 }
-
 
 

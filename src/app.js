@@ -8,6 +8,7 @@ import googleAdsRoutes from "./routes/googleAds.routes.js";
 import metaAdsRoutes from "./routes/metaAds.routes.js";
 import linkedinRoutes from "./routes/linkedin.routes.js";
 import indiaMartRoutes from "./routes/indiamart.routes.js";
+import whatsappRoutes from "./routes/whatsapp.routes.js";
 
 const app = express();
 
@@ -87,6 +88,7 @@ app.use("/ads/google", googleAdsRoutes);
 app.use("/api/ads/meta", metaAdsRoutes);
 app.use("/", linkedinRoutes);
 app.use("/", indiaMartRoutes);
+app.use("/", whatsappRoutes);
 
 
 

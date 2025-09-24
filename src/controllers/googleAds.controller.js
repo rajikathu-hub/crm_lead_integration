@@ -23,11 +23,14 @@ import {
       console.log("after token");
 
       const resourceNames = await listAccessibleCustomers();
-      res.json({
-        message: "Google Ads connected. Choose a customer to proceed.",
-        accessibleCustomerResourceNames: resourceNames,
-        tip: "POST one resourceName to /ads/google/select-customer",
-      });
+      // res.json({
+      //   message: "Google Ads connected. Choose a customer to proceed.",
+      //   accessibleCustomerResourceNames: resourceNames,
+      //   tip: "POST one resourceName to /ads/google/select-customer",
+      // });
+
+      res.redirect(`${process.env.FRONTEND_URL}/auth/callback?platform=google&success=true&customers=${encodeURIComponent(JSON.stringify(resourceNames))}`);
+
     } catch (e) {
       res.status(400).json({ error: e?.response?.data || e.message });
     }
@@ -36,11 +39,9 @@ import {
   
   export async function selectCustomer(req, res) {
     try {
-      console.log("selectCustomer");
       const userId = (req.query.userId || 1);   // ← add this
       
       const { customerResourceName } = req.body || {};
-      console.log(customerResourceName);
       const id = await setSelectedCustomerId(customerResourceName, userId); // ← pass userId
       res.json({ ok: true, selectedCustomerId: id });
     } catch (e) {
@@ -79,32 +80,46 @@ import {
 
   export async function getLeadsLast30Days(req, res) {
     try {
-      console.log("get leads entered");
-      const userId = (req.query.userId || 1);
+      const userId = req.query.userId || 1;
+  
+      // Calculate last 30 days
+      const today = new Date();
+      const past30 = new Date();
+      past30.setDate(today.getDate() - 30);
+      const fromDate = past30.toISOString().split("T")[0]; // YYYY-MM-DD
+  
+      // GAQL query
       const GAQL = `
         SELECT
           lead_form_submission_data.asset,
-          lead_form_submission_data.campaign,
-          lead_form_submission_data.ad_group,
-          lead_form_submission_data.ad,
+          asset.id,
+          asset.name,
+          campaign.id,
+          campaign.name,
+          ad_group.id,
+          ad_group.name,
           lead_form_submission_data.gclid,
           lead_form_submission_data.submission_date_time,
           lead_form_submission_data.lead_form_submission_fields
         FROM lead_form_submission_data
-        WHERE segments.date DURING LAST_30_DAYS
+        WHERE lead_form_submission_data.submission_date_time >= '${fromDate} 00:00:00'
         ORDER BY lead_form_submission_data.submission_date_time DESC
         LIMIT 200
       `;
+  
       const rows = await searchStreamGAQL(GAQL, userId);
-      console.log("rows",rows);
+      console.log("rows", rows);
+  
       res.json({
         customerId: mem.googleAds.selectedCustomerId,
         count: rows.length,
         items: rows.map(r => ({
-          asset: r.leadFormSubmissionData?.asset,
-          campaign: r.leadFormSubmissionData?.campaign,
-          adGroup: r.leadFormSubmissionData?.adGroup,
-          ad: r.leadFormSubmissionData?.ad,
+          assetId: r.leadFormSubmissionData?.asset,
+          assetName: r.asset?.name,            // ✅ Lead form name
+          campaignId: r.campaign?.id,
+          campaignName: r.campaign?.name,
+          adGroupId: r.adGroup?.id,
+          adGroupName: r.adGroup?.name,
           gclid: r.leadFormSubmissionData?.gclid,
           submissionDateTime: r.leadFormSubmissionData?.submissionDateTime,
           fields: r.leadFormSubmissionData?.leadFormSubmissionFields
@@ -114,7 +129,7 @@ import {
       res.status(400).json({ error: e?.response?.data || e.message });
     }
   }
-
+  
   export async function getGoogleConnectionHandler(req, res) {
     try {
       const { userId } = req.query;

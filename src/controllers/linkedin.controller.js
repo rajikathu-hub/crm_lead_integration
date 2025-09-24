@@ -161,6 +161,7 @@ export const getLeadForms = async (req, res) => {
   }
 
   try {
+    // 1. Get token
     const db = await getDb();
  
     const { data, error } = await db
@@ -175,11 +176,28 @@ export const getLeadForms = async (req, res) => {
     }
  
     const token = data.token;
-   
-    const accountUrn = `urn:li:sponsoredAccount:${accountId}`;
+    
+    // 2. Get ad account details (to find organization)
+    const accountResponse = await axios.get(
+      `https://api.linkedin.com/v2/adAccountsV2/${accountId}`,
+      { headers: { Authorization: `Bearer ${token}` } }
+    );
 
+    console.log("🔎 adAccount response:", accountResponse.data);
+
+    const organizationUrn =
+      accountResponse.data.reference ||
+      accountResponse.data.elements?.[0]?.reference;
+
+    if (!organizationUrn) {
+      return res.status(404).json({ error: "Organization URN not found in ad account" });
+    }
+
+    console.log("✅ Using organization URN:", organizationUrn);
+
+    // 3. Fetch lead forms with organization URN
     const response = await axios.get(
-      `https://api.linkedin.com/v2/leadForms?q=account&account=${accountUrn}`,
+      `https://api.linkedin.com/v2/leadForms?q=organization&organization=${organizationUrn}`,
       { headers: { Authorization: `Bearer ${token}` } }
     );
 
@@ -189,44 +207,3 @@ export const getLeadForms = async (req, res) => {
     res.status(500).json({ error: err.response?.data || err.message });
   }
 };
-
-
-// export const getLeadForms = async (req, res) => {
-//   const userId = req.query.userId || 1;
-//   const accountId = req.query.accountId; // numeric ID (e.g., 513592219)
-
-//   if (!accountId) {
-//     return res.status(400).json({ error: "accountId is required" });
-//   }
-
-//   try {
-//     // 1. Get token from DB
-//     const [rows] = await db.query(
-//       "SELECT token FROM api_connections WHERE user_id=? AND platform_name=?",
-//       [userId, "linkedin"]
-//     );
-
-//     if (!rows || rows.length === 0) {
-//       return res.json({ ok: false, message: "No LinkedIn API key found" });
-//     }
-
-//     const token = rows[0].token;
-
-//     // 2. Prepare account URN
-//     const accountUrn = `urn:li:sponsoredAccount:${accountId}`;
-
-//     // 3. Fetch Lead Forms
-//     const response = await axios.get(
-//       `https://api.linkedin.com/v2/leadForms?q=account&account=${accountUrn}`,
-//       { headers: { Authorization: `Bearer ${token}` } }
-//     );
-
-//     res.json({ ok: true, forms: response.data });
-//   } catch (error) {
-//     console.error("LinkedIn Lead Forms Error:", error.response?.data || error.message);
-//     res.status(500).json({ error: error.response?.data || error.message });
-//   }
-// };
-
-
-
