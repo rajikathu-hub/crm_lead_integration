@@ -54,6 +54,18 @@ export const whatsappWebhook = async (req, res) => {
     let userId = null;
 
     const db = await getDb();
+    const { error:insError } = await db.from("test_whatsapp_integration").insert([
+      {
+        raw_data: payload
+      },
+    ]);
+
+    if (insError) {
+      console.error("Error inserting test:", insError);
+      return res.sendStatus(500);
+    }
+
+
 
     // Lookup user_id from api_connections by phone_number_id
     if (phoneNumberId) {
