@@ -22,19 +22,20 @@ export function getGoogleAdsAuthUrl() {
     scope: ["https://www.googleapis.com/auth/adwords"],
   });
 }
-
-
-
+ 
 export async function exchangeAdsCode(code, userId = 1) {
   
   console.log("Before Tokens received");
-  console.log("toekn",process.env.GOOGLE_ADS_REDIRECT_URI)
+  console.log("token",process.env.GOOGLE_ADS_REDIRECT_URI)
+
   const { tokens } = await oauthAds.getToken(code);
+
+  console.log("token : ", tokens);
 
   // keep your current in-memory lines
   const now = Math.floor(Date.now() / 1000);
   mem.googleAds.access_token = tokens.access_token || null;
-  console.log("Refresh Token:",tokens.refresh_token);
+
   if (tokens.refresh_token) mem.googleAds.refresh_token = tokens.refresh_token;
   mem.googleAds.access_token_expiry = now + (tokens.expires_in || 3600);
 
@@ -56,49 +57,49 @@ async function getFreshAccessToken(userId = 1) {
   if (mem.googleAds.access_token && now < mem.googleAds.access_token_expiry - 60) {
     return mem.googleAds.access_token;
   }
-  //else{
-    // 2) Try DB fallback
-    const row = await getGoogleConnection(userId);
-    if (row) {
-      // load selected customer into memory if present
-      if (row.ad_account_id && !mem.googleAds.selectedCustomerId) {
-        mem.googleAds.selectedCustomerId = String(row.ad_account_id);
-      }
-     
-      // if DB token is still fresh, use it
-      //@Need to Uncoment and below if to be remove
-      if (tokenIsFresh(row) && row.token) {
-      //if (row.token) {
-        mem.googleAds.access_token = row.token;
-        // recompute approximate expiry in seconds
-        const expSec = Math.floor((new Date(row.token_expires_at).getTime() - Date.now()) / 1000);
-        mem.googleAds.access_token_expiry = now + Math.max(expSec, 0);
-        return mem.googleAds.access_token;
-      }
-     
-      // 3) Refresh using refresh_token if we have one
-      if (row.refresh_token) {
-        const url = "https://oauth2.googleapis.com/token";
-        const params = new URLSearchParams({
-          client_id: process.env.GOOGLE_CLIENT_ID,
-          client_secret: process.env.GOOGLE_CLIENT_SECRET,
-          grant_type: "refresh_token",
-          refresh_token: row.refresh_token,
-        });
-        const { data } = await axios.post(url, params);
-        mem.googleAds.access_token = data.access_token;
-        mem.googleAds.access_token_expiry = now + (data.expires_in || 3600);
-        // also persist refreshed access token + expiry
-        await upsertGoogleConnection(userId, {
-          access_token: data.access_token,
-          refresh_token: row.refresh_token,
-          expires_in: data.expires_in || 3600,
-        });
-        return mem.googleAds.access_token;
-      }
-       
+
+  // 2) Try DB fallback
+  const row = await getGoogleConnection(userId);
+  if (row) {
+    // load selected customer into memory if present
+    if (row.ad_account_id && !mem.googleAds.selectedCustomerId) {
+      mem.googleAds.selectedCustomerId = String(row.ad_account_id);
     }
-  //}
+    
+    // if DB token is still fresh, use it
+    //@Need to Uncoment and below if to be remove
+    if (tokenIsFresh(row) && row.token) {
+    //if (row.token) {
+      mem.googleAds.access_token = row.token;
+      // recompute approximate expiry in seconds
+      const expSec = Math.floor((new Date(row.token_expires_at).getTime() - Date.now()) / 1000);
+      mem.googleAds.access_token_expiry = now + Math.max(expSec, 0);
+      return mem.googleAds.access_token;
+    }
+    
+    // 3) Refresh using refresh_token if we have one
+    if (row.refresh_token) {
+      const url = "https://oauth2.googleapis.com/token";
+      const params = new URLSearchParams({
+        client_id: process.env.GOOGLE_CLIENT_ID,
+        client_secret: process.env.GOOGLE_CLIENT_SECRET,
+        grant_type: "refresh_token",
+        refresh_token: row.refresh_token,
+      });
+      const { data } = await axios.post(url, params);
+      mem.googleAds.access_token = data.access_token;
+      mem.googleAds.access_token_expiry = now + (data.expires_in || 3600);
+      // also persist refreshed access token + expiry
+      await upsertGoogleConnection(userId, {
+        access_token: data.access_token,
+        refresh_token: row.refresh_token,
+        expires_in: data.expires_in || 3600,
+      });
+      return mem.googleAds.access_token;
+    }
+      
+  }
+
   throw new Error("No valid Google Ads token available. Reconnect via /ads/google/connect.");
 }
 
@@ -176,13 +177,13 @@ export async function searchStreamGAQL(gaql, userId = 1) {
       { headers: { ...baseHeaders(token), "Content-Type": "application/json" } }
     );
 
-    console.log("✅ Full API response:", JSON.stringify(data, null, 2));
+    // console.log("✅ Full API response:", JSON.stringify(data, null, 2));
 
     const rows = [];
     if (Array.isArray(data)) {
       for (const chunk of data) if (chunk.results) rows.push(...chunk.results);
     }
-    console.log("Flattened rows count:", rows.length);
+    //console.log("Flattened rows count:", rows.length);
     return rows;
   } catch (err) {
     console.error("❌ Google Ads API error:", err.response?.data || err.message);

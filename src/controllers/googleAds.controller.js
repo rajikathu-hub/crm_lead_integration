@@ -1,3 +1,4 @@
+import { json } from "express";
 import {
     getGoogleAdsAuthUrl,
     exchangeAdsCode,
@@ -108,13 +109,13 @@ import {
       `;
   
       const rows = await searchStreamGAQL(GAQL, userId);
-      console.log("rows", rows);
-  
+ 
       res.json({
         customerId: mem.googleAds.selectedCustomerId,
         count: rows.length,
-        items: rows.map(r => ({
-          assetId: r.leadFormSubmissionData?.asset,
+        leads: rows.map(r => ({
+          asset: r.leadFormSubmissionData?.asset,
+          assetId: r.asset?.id,
           assetName: r.asset?.name,            // ✅ Lead form name
           campaignId: r.campaign?.id,
           campaignName: r.campaign?.name,
@@ -122,6 +123,7 @@ import {
           adGroupName: r.adGroup?.name,
           gclid: r.leadFormSubmissionData?.gclid,
           submissionDateTime: r.leadFormSubmissionData?.submissionDateTime,
+          leadId:`${r.gclid}_${r.submissionDateTime}`,
           fields: r.leadFormSubmissionData?.leadFormSubmissionFields
         }))
       });
@@ -129,7 +131,7 @@ import {
       res.status(400).json({ error: e?.response?.data || e.message });
     }
   }
-  
+   
   export async function getGoogleConnectionHandler(req, res) {
     try {
       const { userId } = req.query;

@@ -75,7 +75,7 @@ export const linkedinCallback = async (req, res) => {
     res.redirect(`${process.env.FRONTEND_URL}/auth/callback?platform=linkedin&success=true`);
 
   } catch (error) {
-    console.error("LinkedIn Token Exchange Error:", error.response?.data || error.message);
+    console.error("LinkedIn change Error:", error.response?.data || error.message);
     // res.status(500).json({ error: error.response?.data || error.message });
     res.redirect(`${process.env.FRONTEND_URL}/auth/callback?platform=linkedin&success=false`);
   }
