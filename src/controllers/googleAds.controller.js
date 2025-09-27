@@ -16,12 +16,12 @@ import {
   export async function googleAdsCallback(req, res) {
     try {
       const { code,state } = req.query;
-      console.log("Google callback, code =", code);
+      //console.log("Google callback, code =", code);
       if (!code) return res.status(400).json({ error: "Missing code" });
   
       const userId = state || 1; // ← add this line
       await exchangeAdsCode(code, userId);          // ← pass userId here
-      console.log("after token");
+      //console.log("after token");
 
       const resourceNames = await listAccessibleCustomers();
       // res.json({
