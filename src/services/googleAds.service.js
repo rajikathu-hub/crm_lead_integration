@@ -26,8 +26,7 @@ export function getGoogleAdsAuthUrl() {
 export async function exchangeAdsCode(code, userId = 1) {
   
   console.log("Before Tokens received");
-  console.log("token",process.env.GOOGLE_ADS_REDIRECT_URI)
-
+  
   const { tokens } = await oauthAds.getToken(code);
 
   console.log("token : ", tokens);

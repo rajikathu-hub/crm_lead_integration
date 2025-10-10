@@ -49,7 +49,7 @@ export const connectIndiaMart = async (req, res) => {
 /**
  * Fetch IndiaMART leads and save them in DB
  */
-export const fetchIndiaMartLeads = async (req, res) => {
+export const  fetchIndiaMartLeads = async (req, res) => {
   try {
     const { userId, start_time, end_time } = req.query;
     
