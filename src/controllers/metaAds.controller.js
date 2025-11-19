@@ -138,7 +138,7 @@ export const getCampaigns = async (req, res) => {
   try {
     const { data: row, error } = await db
       .from("intg_api_connections")
-      .select("token")
+      .select("token, page_id, page_access_token")
       .eq("user_id", userId)
       .eq("platform_name", "meta_ads")
       .maybeSingle();
@@ -148,27 +148,173 @@ export const getCampaigns = async (req, res) => {
       return res.status(400).json({ error: "No Meta Ads token found" });
     }
 
-    const accessToken = row.token;
+    
+    const userToken = row.token;
+    const pageId = row.page_id;
+    const pageToken = row.page_access_token;
 
-    const response = await axios.get(
-      `https://graph.facebook.com/v21.0/me/adaccounts`,
-      {
-        params: {
-          fields: "id,name,account_status",
-          access_token: accessToken,
-        },
-      }
+    // ============================================
+    // ⭐ NEW: Ensure page is connected
+    // ============================================
+    if (!pageId || !pageToken) {
+      return res.status(400).json({
+        error: "Meta Ads must be connected first (missing page_id/page_access_token)"
+      });
+    }
+
+    // ============================================
+    // ⭐ NEW: Get Business Accounts for this page
+    // ============================================
+    const businessResp = await axios.get(
+      `https://graph.facebook.com/v21.0/${pageId}?fields=business&access_token=${pageToken}`
     );
 
-    res.json(response.data);
+    const businessId = businessResp.data?.business?.id;
+
+    if (!businessId) {
+      return res.json({
+        ok: true,
+        message: "Page has no business linked. Campaigns cannot be fetched."
+      });
+    }
+
+    // ============================================
+    // ⭐ NEW: Get ad accounts under this business
+    // ============================================
+    const adAccResp = await axios.get(
+      `https://graph.facebook.com/v21.0/${businessId}/owned_ad_accounts?fields=id,name,account_status&access_token=${pageToken}`
+    );
+
+    const adAccounts = adAccResp.data?.data || [];
+
+    if (adAccounts.length === 0) {
+      return res.json({
+        ok: true,
+        message: "No ad accounts linked to this business."
+      });
+    }
+
+    // Use the first ad account
+    const adAccountId = adAccounts[0].id;
+
+    // ============================================
+    // ⭐ NEW: Fetch Campaigns from Ad Account
+    // ============================================
+    const campaignResp = await axios.get(
+      `https://graph.facebook.com/v21.0/${adAccountId}/campaigns?fields=id,name,status,objective&access_token=${pageToken}`
+    );
+
+    return res.json({
+      ok: true,
+      businessId,
+      adAccountId,
+      campaigns: campaignResp.data.data || []
+    });
+    
   } catch (err) {
     console.error("Error fetching campaigns:", err.response?.data || err.message);
     res.status(500).json({ error: "Failed to fetch campaigns" });
   }
 };
 
+/** Fetch leads from a lead form */
+export const getLeads = async (req, res) => {
+  const { userId, formId } = req.query;
+  const db = await getDb();
 
+  try {
+    // Step 1: Get user token
+    const { data: row, error } = await db
+      .from("intg_api_connections")
+      .select("token, page_id, page_access_token, page_name")
+      .eq("user_id", userId)
+      .eq("platform_name", "meta_ads")
+      .maybeSingle();
 
+    if (error) throw error;
+    if (!row) {
+      return res.status(400).json({ error: "No Meta Ads token found" });
+    }
+
+    const userToken = rows.token;
+    const pageId = rows.page_id;
+    const pageToken = rows.page_access_token;
+    const pageName = rows.page_name;
+
+    // ============================================
+    // ⭐ NEW: Ensure page is connected
+    // ============================================
+    if (!pageId || !pageToken) {
+      return res.status(400).json({
+        error: "Meta Ads page not connected. Missing page_id or page_access_token."
+      });
+    }
+
+    let collectedLeads = [];
+
+    // ============================================
+    // ⭐ NEW: Fetch forms for this page
+    // ============================================
+    const formsResp = await axios.get(
+      `https://graph.facebook.com/v21.0/${pageId}/leadgen_forms?fields=id,name&access_token=${pageToken}`
+    );
+
+    const forms = formsResp.data.data || [];
+
+    // ============================================
+    // ⭐ NEW: Process leads for each form
+    // ============================================
+    for (const form of forms) {
+      const leadsResp = await axios.get(
+        `https://graph.facebook.com/v21.0/${form.id}/leads?fields=created_time,field_data&access_token=${pageToken}`
+      );
+
+      for (const lead of leadsResp.data.data || []) {
+        // ============================================
+        // ⭐ NEW: Prevent duplicate leads
+        // ============================================
+        const leadString = JSON.stringify(lead);
+
+        const { data: exists, error } = await db.from("intg_leads")
+        .select("id")
+        .eq("user_id", userId)
+        .eq("platform", "meta_ads")
+        .eq("lead_data", leadString)
+        .limit(1)
+        .maybeSingle();
+
+        if (exists.length === 0) {
+          // Store in DB (existing logic)
+          const { error: leadErr } = await db.from("intg_leads").insert({
+            user_id: userId,
+            platform: "meta_ads",
+            lead_data: leadString, // Supabase can store JSON directly if column type is `jsonb`
+          });
+          if (leadErr) console.error("Insert lead error:", leadErr.message);
+        }
+
+        // Push to response list
+        collectedLeads.push({
+          pageName,
+          formName: form.name,
+          created_time: lead.created_time,
+          data: lead.field_data,
+        });
+      }
+    }
+
+    // Existing logic stays
+    if (collectedLeads.length === 0) {
+      return res.json({ ok: true, message: "No leads found on any form" });
+    }
+
+    res.json({ ok: true, leads: collectedLeads });
+  } 
+  catch (err) {
+    console.error("Error fetching leads:", err.response?.data || err.message);
+    res.status(500).json({ error: "Failed to fetch leads" });
+  }
+};
 
 const APP_ID = process.env.META_APP_ID;
 const APP_SECRET = process.env.META_APP_SECRET;
@@ -207,95 +353,64 @@ export const exchangeToken = async (req, res) => {
 
     const longToken = longResp.data.access_token;
 
-    // Step 3: Save into api_connections
-    await db.query(
-      `INSERT INTO intg_api_connections (user_id, platform_name, token, status)
-       VALUES (?, ?, ?, ?)
-       ON DUPLICATE KEY UPDATE token = VALUES(token), status = VALUES(status)`,
-      [userId, "meta_ads", longToken, "connected"]
+     // ===============================
+    // ⭐ NEW LOGIC ADDED: Fetch Pages
+    // ===============================
+    const pagesResp = await axios.get(
+      `https://graph.facebook.com/v21.0/me/accounts?access_token=${longToken}`
     );
 
-    res.json({ ok: true, message: "Meta Ads connected", token: longToken });
+    let selectedPage = null;
+
+    if (pagesResp.data?.data?.length > 0) {
+      // Pick first page (or you can later add UI for selection)
+      selectedPage = pagesResp.data.data[0];
+    }
+
+    const pageId = selectedPage?.id || null;
+    const pageName = selectedPage?.name || null;
+    const pageAccessToken = selectedPage?.access_token || null;
+
+    // ===============================
+    // ⭐ SAVE EVERYTHING
+    // (Keeps your existing insert logic)
+    // ===============================
+    await db.query(
+      `INSERT INTO api_connections 
+        (user_id, platform_name, token, status, page_id, page_name, page_access_token)
+       VALUES (?, ?, ?, ?, ?, ?, ?)
+       ON DUPLICATE KEY UPDATE 
+          token = VALUES(token),
+          status = VALUES(status),
+          page_id = VALUES(page_id),
+          page_name = VALUES(page_name),
+          page_access_token = VALUES(page_access_token)`,
+      [
+        userId,
+        "meta_ads",
+        longToken,            // Keep saving USER token as per your old logic
+        "connected",
+        pageId,               // NEW
+        pageName,             // NEW
+        pageAccessToken       // NEW
+      ]
+    );
+
+    res.json({
+      ok: true,
+      message: "Meta Ads connected successfully",
+      userToken: longToken,
+      pageId,
+      pageName,
+      pageAccessToken
+    });
   } catch (err) {
     console.error("Error exchanging Meta Ads token:", err.response?.data || err);
     res.status(500).json({ error: "Failed to exchange token" });
   }
 };
 
-/** Fetch leads from a lead form */
-export const getLeads = async (req, res) => {
-  const { userId, formId } = req.query;
-  const db = await getDb();
 
-  try {
-    // Step 1: Get user token
-    const { data: row, error } = await db
-      .from("intg_api_connections")
-      .select("token")
-      .eq("user_id", userId)
-      .eq("platform_name", "meta_ads")
-      .maybeSingle();
-
-    if (error) throw error;
-    if (!row) {
-      return res.status(400).json({ error: "No Meta Ads token found" });
-    }
-
-    const userToken = row.token;
-    
-    // Step 2: Get pages for the user
-    const pagesResp = await axios.get(
-      `https://graph.facebook.com/v21.0/me/accounts`,
-      { params: { access_token: userToken } }
-    );
-
-    let leads = [];
-
-    // Step 3: Try fetching leads from the form for each page
-    for (const page of pagesResp.data.data) {
-      const pageToken = page.access_token;
-
-      try {
-        const leadsResp = await axios.get(
-          `https://graph.facebook.com/v21.0/${formId}/leads`,
-          {
-            params: {
-              fields: "created_time,field_data",
-              access_token: pageToken,
-            },
-          }
-        );
-
-        // Step 4: Save each lead into Supabase
-        for (const lead of leadsResp.data.data) {
-          const { error: leadErr } = await db.from("intg_leads").insert({
-            user_id: userId,
-            platform: "meta_ads",
-            lead_data: lead, // Supabase can store JSON directly if column type is `jsonb`
-          });
-          if (leadErr) console.error("Insert lead error:", leadErr.message);
-        }
-
-        // Collect for response
-        leads = leads.concat(leadsResp.data.data);
-      } catch (innerErr) {
-        // If page doesn’t own the form, skip
-        continue;
-      }
-    }
-
-    // Step 5: Return
-    if (leads.length === 0) {
-      return res.json({ ok: true, message: "No leads found for this form" });
-    }
-
-    res.json({ ok: true, leads });
-  } catch (err) {
-    console.error("Error fetching leads:", err.response?.data || err.message);
-    res.status(500).json({ error: "Failed to fetch leads" });
-  }
-};
-  
 // Handle redirect from Meta OAuth
 export const metaCallback = async (req, res) => {
   const { code, state } = req.query; // state = userId
@@ -334,7 +449,27 @@ export const metaCallback = async (req, res) => {
     );
     const longToken = longResp.data.access_token;
    
-    // Save token into Supabase
+    // ==========================================
+    // ⭐ NEW LOGIC ADDED — Fetch Pages
+    // ==========================================
+    const pagesResp = await axios.get(
+      `https://graph.facebook.com/v21.0/me/accounts?access_token=${longToken}`
+    );
+
+    let selectedPage = null;
+
+    if (pagesResp.data?.data?.length > 0) {
+      // pick the first page (later UI selection can be added)
+      selectedPage = pagesResp.data.data[0];
+    }
+
+    const pageId = selectedPage?.id || null;
+    const pageName = selectedPage?.name || null;
+    const pageAccessToken = selectedPage?.access_token || null;
+
+    // ==========================================
+    // ⭐ SAVE ALL DATA (keeping your original insert)
+    // ==========================================
     const userId = state || 1; // fallback for testing  
 
     const db = await getDb();
@@ -346,17 +481,29 @@ export const metaCallback = async (req, res) => {
           platform_name: "meta_ads",
           token: longToken,
           status: "connected",
+          page_id:pageId,
+          page_name:pageName,
+          page_access_token:pageAccessToken
         },
         { onConflict: "user_id,platform_name" }
       );
        
     if (error) throw error;
 
-    // res.json({ ok: true, message: "Meta Ads connected", token: longToken });
+    // response
+    // res.json({
+    //   ok: true,
+    //   message: "Meta Ads connected",
+    //   userToken: longToken,
+    //   pageId,
+    //   pageName,
+    //   pageAccessToken
+    // });
+
     res.redirect(`${process.env.FRONTEND_URL}/auth/callback?platform=meta_ads&success=true`);
   } catch (err) {
     console.error("Error in Meta callback:", err.response?.data || err.message);
-    // res.status(500).json({ error: "Meta OAuth failed" });
+    // res.status(500).json({ error: "Meta callback failed" });
     res.redirect(`${process.env.FRONTEND_URL}/auth/callback?platform=meta_ads&success=false`);
   }
 };
@@ -368,43 +515,49 @@ export const getForms = async (req, res) => {
   try {
     // Step 1: Get token from Supabase
     const db = await getDb();
-    const { data, error } = await db
+    const { data:row, error } = await db
       .from("intg_api_connections")
-      .select("token")
+      .select("token, page_id, page_access_token, page_name")
       .eq("user_id", userId)
       .eq("platform_name", "meta_ads")
       .single();
 
-    if (error || !data) {
+    if (error || !row) {
       return res.status(400).json({ error: "No Meta Ads token found" });
     }
 
-    const userToken = data.token;
+    const userToken = row.token;
+    const pageId = row.page_id;
+    const pageToken = row.page_access_token;
+    const pageName = row.page_name;
 
-    // Step 2: Get connected pages
-    const pagesResp = await axios.get(
-      `https://graph.facebook.com/v21.0/me/accounts?access_token=${userToken}`
-    );
-
-    let forms = [];
-
-    // Step 3: Fetch forms for each page
-    for (const page of pagesResp.data.data) {
-      const pageId = page.id;
-      const pageToken = page.access_token;
-
-      const formResp = await axios.get(
-        `https://graph.facebook.com/v21.0/${pageId}/leadgen_forms?fields=id,name&access_token=${pageToken}`
-      );
-
-      forms.push({
-        pageId,
-        pageName: page.name,
-        forms: formResp.data.data,
+    // ============================================
+    // ⭐ NEW LOGIC ADDED — Use stored page token
+    // ============================================
+    if (!pageId || !pageToken) {
+      return res.status(400).json({
+        error: "Meta Ads page not connected properly. Missing page_id or page_access_token."
       });
     }
 
-    res.json({ ok: true, forms });
+    // Step 2 (new): Fetch forms directly from saved page_id
+    const formResp = await axios.get(
+      `https://graph.facebook.com/v21.0/${pageId}/leadgen_forms?fields=id,name&access_token=${pageToken}`
+    );
+
+    const forms = [
+      {
+        pageId,
+        pageName,
+        forms: formResp.data?.data || []
+      }
+    ];
+
+    // Step 3: Return the correct response
+    return res.json({
+      ok: true,
+      forms
+    });
   } catch (err) {
     console.error("Error fetching forms:", err.response?.data || err.message);
     res.status(500).json({ error: "Failed to fetch forms" });
