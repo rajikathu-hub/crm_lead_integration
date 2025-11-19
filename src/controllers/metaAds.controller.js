@@ -236,10 +236,10 @@ export const getLeads = async (req, res) => {
       return res.status(400).json({ error: "No Meta Ads token found" });
     }
 
-    const userToken = rows.token;
-    const pageId = rows.page_id;
-    const pageToken = rows.page_access_token;
-    const pageName = rows.page_name;
+    const userToken = row.token;
+    const pageId = row.page_id;
+    const pageToken = row.page_access_token;
+    const pageName = row.page_name;
 
     // ============================================
     // ⭐ NEW: Ensure page is connected
@@ -282,8 +282,8 @@ export const getLeads = async (req, res) => {
         .eq("lead_data", leadString)
         .limit(1)
         .maybeSingle();
-
-        if (exists.length === 0) {
+ 
+        if (!exists) {
           // Store in DB (existing logic)
           const { error: leadErr } = await db.from("intg_leads").insert({
             user_id: userId,
@@ -530,7 +530,7 @@ export const getForms = async (req, res) => {
     const pageId = row.page_id;
     const pageToken = row.page_access_token;
     const pageName = row.page_name;
-
+ 
     // ============================================
     // ⭐ NEW LOGIC ADDED — Use stored page token
     // ============================================
@@ -544,7 +544,7 @@ export const getForms = async (req, res) => {
     const formResp = await axios.get(
       `https://graph.facebook.com/v21.0/${pageId}/leadgen_forms?fields=id,name&access_token=${pageToken}`
     );
-
+ 
     const forms = [
       {
         pageId,
