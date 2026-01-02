@@ -86,7 +86,7 @@ import {
       // Calculate last 30 days
       const today = new Date();
       const past30 = new Date();
-      past30.setDate(today.getDate() - 30);
+      past30.setDate(today.getDate() - 90);
       const fromDate = past30.toISOString().split("T")[0]; // YYYY-MM-DD
   
       // GAQL query

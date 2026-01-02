@@ -303,6 +303,8 @@ export const getLeads = async (req, res) => {
 
         // Push to response list
         collectedLeads.push({
+          id: lead.id,             // ✅ Meta Lead ID
+          formId: form.id,          // ✅ Meta Form ID
           pageName,
           formName: form.name,
           created_time: lead.created_time,
