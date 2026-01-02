@@ -223,6 +223,11 @@ export const getLeads = async (req, res) => {
   const db = await getDb();
 
   try {
+
+    if (!formId) {
+      return res.status(400).json({ error: "formId is required" });
+    }
+
     // Step 1: Get user token
     const { data: row, error } = await db
       .from("intg_api_connections")
@@ -265,6 +270,9 @@ export const getLeads = async (req, res) => {
     // ⭐ NEW: Process leads for each form
     // ============================================
     for (const form of forms) {
+
+      if (formId && form.id !== formId) continue; // 🔥 Restriction
+
       const leadsResp = await axios.get(
         `https://graph.facebook.com/v21.0/${form.id}/leads?fields=created_time,field_data&access_token=${pageToken}`
       );
