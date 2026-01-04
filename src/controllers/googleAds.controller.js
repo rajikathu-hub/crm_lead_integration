@@ -81,14 +81,29 @@ import {
 
   export async function getLeadsLast30Days(req, res) {
     try {
-      const userId = req.query.userId || 1;
-  
-      // Calculate last 30 days
-      const today = new Date();
-      const past30 = new Date();
-      past30.setDate(today.getDate() - 90);
-      const fromDate = past30.toISOString().split("T")[0]; // YYYY-MM-DD
-  
+      
+      // const userId = req.query.userId || 1;
+      
+      const { userId, startDate, endDate } = req.query;
+      
+      let fromDate = null;
+      let toDate = null;
+      if (!startDate || !endDate) {
+        // Calculate last 30 days
+        const today = new Date();
+        const past30 = new Date();
+        past30.setDate(today.getDate() - 90);
+        
+        fromDate = past30.toISOString().split("T")[0]; // YYYY-MM-DD
+        toDate = today.toISOString().split("T")[0]; // YYYY-MM-DD
+
+        console.log(fromDate);
+      }
+      else {
+        fromDate = startDate;
+        toDate = endDate;
+      }
+      
       // GAQL query
       const GAQL = `
         SELECT
@@ -103,11 +118,12 @@ import {
           lead_form_submission_data.submission_date_time,
           lead_form_submission_data.lead_form_submission_fields
         FROM lead_form_submission_data
-        WHERE lead_form_submission_data.submission_date_time >= '${fromDate} 00:00:00'
+        WHERE lead_form_submission_data.submission_date_time BETWEEN '${fromDate} 00:00:00' AND '${toDate} 23:59:59'
         ORDER BY lead_form_submission_data.submission_date_time DESC
         LIMIT 200
       `;
-  
+       // WHERE lead_form_submission_data.submission_date_time >= '${fromDate} 00:00:00'
+      
       const rows = await searchStreamGAQL(GAQL, userId);
  
       res.json({
@@ -123,7 +139,7 @@ import {
           adGroupName: r.adGroup?.name,
           gclid: r.leadFormSubmissionData?.gclid,
           submissionDateTime: r.leadFormSubmissionData?.submissionDateTime,
-          leadId:`${r.gclid}_${r.submissionDateTime}`,
+          leadId  :`${r.leadFormSubmissionData?.gclid}_${r.leadFormSubmissionData?.submissionDateTime}`,
           fields: r.leadFormSubmissionData?.leadFormSubmissionFields
         }))
       });

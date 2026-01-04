@@ -16,8 +16,6 @@ export const connectIndiaMart = async (req, res) => {
       return res.status(400).json({ error: "user_id and api_key are required" });
     }
  
-    const db = await getDb();
-
     // Insert or update API key in api_connections
     const { error } = await db
       .from("intg_api_connections")
@@ -93,19 +91,21 @@ export const  fetchIndiaMartLeads = async (req, res) => {
 
     // 4. Save leads into Supabase
     for (let lead of leads) {
-      if (!lead.QUERY_ID) continue; // skip if no unique ID
+      if (!lead.UNIQUE_QUERY_ID) continue; // skip if no unique ID
 
-      const { error: insertError } = await supabase
+      const db = await getDb();
+
+      const { error: insertError } = await db
         .from("intg_leads")
         .upsert(
           {
-            userId,
+            user_id:userId,
             platform: "indiamart",
-            external_lead_id: lead.QUERY_ID, // unique lead ID
-            lead_data: lead,                 // Supabase will store JSON
+            external_lead_id: lead.UNIQUE_QUERY_ID, // unique lead ID
+            lead_data: lead,                        // Supabase will store JSON
             created_at: new Date().toISOString(),
           },
-          { onConflict: "external_lead_id" } // must match your DB unique constraint
+          { onConflict: "platform,external_lead_id" } // must match your DB unique constraint
         );
 
       if (insertError) {

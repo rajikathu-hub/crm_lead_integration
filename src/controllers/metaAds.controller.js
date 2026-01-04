@@ -219,7 +219,7 @@ export const getCampaigns = async (req, res) => {
 
 /** Fetch leads from a lead form */
 export const getLeads = async (req, res) => {
-  const { userId, formId } = req.query;
+  const { userId, formId, startDate, endDate } = req.query;
   const db = await getDb();
 
   try {
@@ -228,6 +228,21 @@ export const getLeads = async (req, res) => {
       return res.status(400).json({ error: "formId is required" });
     }
 
+    let fromDate = null;
+    let toDate = null;
+    if (startDate && endDate) {
+      fromDate = new Date(`${startDate}T00:00:00Z`);
+      toDate = new Date(`${endDate}T23:59:59Z`);
+      
+      if (isNaN(fromDate.getTime()) || isNaN(toDate.getTime())) {
+        return res.status(400).json({ error: "Invalid date format" });
+      }
+
+      if (fromDate > toDate) {
+        return res.status(400).json({ error: "startDate cannot be after endDate" });
+      }
+    }
+    
     // Step 1: Get user token
     const { data: row, error } = await db
       .from("intg_api_connections")
@@ -240,7 +255,7 @@ export const getLeads = async (req, res) => {
     if (!row) {
       return res.status(400).json({ error: "No Meta Ads token found" });
     }
-
+  
     const userToken = row.token;
     const pageId = row.page_id;
     const pageToken = row.page_access_token;
@@ -278,6 +293,12 @@ export const getLeads = async (req, res) => {
       );
 
       for (const lead of leadsResp.data.data || []) {
+
+        const createdTime = new Date(lead.created_time);
+         
+        if (fromDate && createdTime < fromDate) continue;
+        if (toDate && createdTime > toDate) continue;
+
         // ============================================
         // ⭐ NEW: Prevent duplicate leads
         // ============================================
