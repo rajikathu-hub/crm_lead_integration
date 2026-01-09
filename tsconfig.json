@@ -1,0 +1,23 @@
+{
+    "compilerOptions": {
+        "target": "ES2022",
+        "module": "NodeNext",
+        "moduleResolution": "NodeNext",
+        "outDir": "./dist",
+        "rootDir": "./",
+        "strict": false,
+        "esModuleInterop": true,
+        "skipLibCheck": true,
+        "forceConsistentCasingInFileNames": true
+    },
+    "include": [
+        "gateway.ts",
+        "CRM_Ads_Integration/src/**/*",
+        "RazorPay_Gateway/src/**/*"
+    ],
+    "exclude": [
+        "node_modules",
+        "**/dist",
+        "**/test"
+    ]
+}
